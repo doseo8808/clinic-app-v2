@@ -1,0 +1,23 @@
+services:
+  clinic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: al-siraj-clinic
+    restart: unless-stopped
+    ports:
+      - "80:8001"
+    environment:
+      - DATABASE_PATH=/var/data/clinic.db
+      - SECRETARY_PIN=${SECRETARY_PIN}
+      - DOCTOR_PIN=${DOCTOR_PIN}
+      - CORS_ORIGINS=*
+      - PORT=8001
+    volumes:
+      # يحفظ قاعدة البيانات على قرص السيرفر نفسه (خارج الحاوية)
+      # حتى لو حذفت الحاوية أو أعدت بناءها، البيانات تبقى في هذا المجلد
+      - clinic-data:/var/data
+
+volumes:
+  clinic-data:
+    driver: local

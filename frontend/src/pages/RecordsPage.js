@@ -1,0 +1,156 @@
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import apiClient, { logout, getRole } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar } from "lucide-react";
+import PrescriptionTemplate from "@/components/PrescriptionTemplate";
+
+const formatDate = (iso) => {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString("ar-EG", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+};
+
+const RecordsPage = () => {
+  const [records, setRecords] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const navigate = useNavigate();
+  const role = getRole();
+
+  const fetchRecords = useCallback(async (search = "") => {
+    setLoading(true);
+    try {
+      const params = { status: "completed" };
+      if (search.trim()) params.search = search.trim();
+      const { data } = await apiClient.get("/patients", { params });
+      setRecords(data);
+    } catch (e) {
+      toast.error("خطأ في جلب السجل");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRecords(); }, [fetchRecords]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchRecords(searchTerm);
+  };
+
+  const handleLogout = () => { logout(); navigate("/login"); };
+  const handleBackToApp = () => navigate(role === "doctor" ? "/doctor" : "/secretary");
+
+  const handlePrint = (record) => {
+    setSelected(record);
+    setTimeout(() => window.print(), 150);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FAFBFC]">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 no-print">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              data-testid="back-to-app-button"
+              variant="ghost" size="icon"
+              onClick={handleBackToApp}
+            >
+              <ArrowLeft className="w-5 h-5 rtl-flip" />
+            </Button>
+            <div className="w-10 h-10 rounded-full bg-[#5B3A7D] flex items-center justify-center">
+              <Archive className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-[#1F2937]">سجل المرضى</h1>
+              <p className="text-xs text-slate-500">الحالات المكتملة</p>
+            </div>
+          </div>
+          <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 ms-1" />
+            <span className="text-sm">خروج</span>
+          </Button>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-6 py-8 no-print">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <Input
+              data-testid="records-search-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="ابحث بالاسم..."
+              className="h-11 text-base flex-1"
+            />
+            <Button
+              data-testid="records-search-button"
+              type="submit"
+              className="h-11 bg-[#5B3A7D] hover:bg-[#4A2E68]"
+            >
+              <Search className="w-4 h-4 ms-2" />
+              بحث
+            </Button>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          {loading ? (
+            <div className="text-center py-16 text-slate-400">جاري التحميل...</div>
+          ) : records.length === 0 ? (
+            <div className="text-center py-16 text-slate-400">
+              <Archive className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">لا توجد سجلات مطابقة</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {records.map((r) => (
+                <div
+                  key={r.id}
+                  data-testid={`record-item-${r.id}`}
+                  className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div>
+                    <p className="font-semibold text-[#1F2937]">{r.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {r.age} سنة • {formatDate(r.updated_at || r.created_at)}
+                    </p>
+                    {r.diagnosis && (
+                      <p className="text-xs text-slate-400 mt-1 truncate max-w-md">
+                        {r.diagnosis}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    data-testid={`print-record-button-${r.id}`}
+                    variant="outline" size="sm"
+                    onClick={() => handlePrint(r)}
+                  >
+                    <Printer className="w-4 h-4 ms-1" />
+                    طباعة
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <div className="print-container">
+        <PrescriptionTemplate patient={selected} examData={selected} />
+      </div>
+    </div>
+  );
+};
+
+export default RecordsPage;

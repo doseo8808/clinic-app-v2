@@ -1,0 +1,326 @@
+/* ============================================
+   Al-Siraj Clinic - Prescription Print Styles
+   Matches clinic's official design (purple/green)
+   ============================================ */
+
+/* Hide the template on screen; show only when printing */
+.print-container {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  z-index: -1;
+  visibility: hidden;
+}
+
+@media print {
+  /* Hide everything, show only the print page */
+  body * {
+    visibility: hidden;
+  }
+  .print-container,
+  .print-container * {
+    visibility: visible;
+  }
+  .print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    z-index: 9999;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+}
+
+/* Prescription page layout */
+.print-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 0;
+  margin: 0 auto;
+  background: white;
+  color: #2A1A3D;
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  position: relative;
+  box-sizing: border-box;
+  direction: rtl;
+}
+
+/* Top decorative border */
+.print-header-border {
+  position: relative;
+  height: 25mm;
+  overflow: hidden;
+}
+
+.print-header-border .border-purple {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 15mm;
+  background: #5B3A7D;
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 60% 100%, 55% 60%, 45% 60%, 40% 100%, 0 100%);
+}
+
+.print-header-border .border-green {
+  position: absolute;
+  top: 12mm;
+  left: 0;
+  right: 0;
+  height: 2mm;
+  background: #4CAF50;
+}
+
+/* Header content */
+.print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 5mm 15mm;
+  gap: 10mm;
+}
+
+.print-header-en {
+  text-align: left;
+  color: #5B3A7D;
+  direction: ltr;
+  flex: 1;
+}
+
+.print-header-en h1 {
+  font-size: 22pt;
+  font-weight: 700;
+  margin: 2mm 0 1mm 0;
+  color: #5B3A7D;
+}
+
+.print-header-en h2 {
+  font-size: 12pt;
+  font-weight: 500;
+  margin: 0;
+  color: #5B3A7D;
+}
+
+.print-header-en p {
+  font-size: 11pt;
+  margin: 1mm 0;
+  color: #5B3A7D;
+}
+
+.print-header-ar {
+  text-align: right;
+  color: #5B3A7D;
+  flex: 1;
+}
+
+.print-header-ar h1 {
+  font-size: 20pt;
+  font-weight: 800;
+  margin: 0 0 3mm 0;
+  color: #5B3A7D;
+}
+
+.print-header-ar .doctor-title {
+  font-size: 12pt;
+  margin: 1mm 0;
+  color: #5B3A7D;
+}
+
+.print-header-ar .doctor-name {
+  font-size: 18pt;
+  font-weight: 700;
+  margin: 1mm 0;
+  color: #5B3A7D;
+}
+
+.print-header-ar .doctor-cred {
+  font-size: 10pt;
+  margin: 0.5mm 0;
+  color: #5B3A7D;
+}
+
+/* Stamp circle */
+.print-stamp-circle {
+  width: 30mm;
+  height: 30mm;
+  border: 2mm solid #5B3A7D;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5B3A7D;
+  font-size: 10pt;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+/* Patient info bar */
+.print-patient-info {
+  display: flex;
+  gap: 8mm;
+  padding: 3mm 15mm;
+  margin-top: 3mm;
+  border-top: 0.5mm solid #E0D5EC;
+  border-bottom: 0.5mm solid #E0D5EC;
+  font-size: 11pt;
+}
+
+.print-patient-info .info-field {
+  display: flex;
+  gap: 2mm;
+  align-items: center;
+}
+
+.print-patient-info .info-label {
+  color: #5B3A7D;
+  font-weight: 600;
+}
+
+.print-patient-info .info-value {
+  color: #2A1A3D;
+  min-width: 30mm;
+  border-bottom: 0.3mm dotted #5B3A7D;
+  padding: 0 2mm;
+}
+
+/* Eye exam table */
+.print-eye-table {
+  width: calc(100% - 30mm);
+  margin: 5mm 15mm;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0.5mm solid #5B3A7D;
+  border-radius: 3mm;
+  overflow: hidden;
+}
+
+.print-eye-table thead th {
+  background: #5B3A7D;
+  color: white;
+  padding: 2mm;
+  font-size: 10pt;
+  font-weight: 600;
+  text-align: center;
+  border-left: 0.3mm solid rgba(255,255,255,0.3);
+}
+
+.print-eye-table thead th:first-child {
+  border-left: none;
+  width: 15mm;
+}
+
+.print-eye-table tbody td {
+  padding: 3mm 2mm;
+  text-align: center;
+  font-size: 11pt;
+  border-top: 0.3mm solid #E0D5EC;
+  border-left: 0.3mm solid #E0D5EC;
+}
+
+.print-eye-table tbody td:first-child {
+  border-left: none;
+}
+
+.print-eye-table .eye-label {
+  background: #5B3A7D;
+  color: white;
+  font-weight: 700;
+  font-size: 12pt;
+}
+
+/* Sections (Rx, Diagnosis, Notes) */
+.print-section {
+  margin: 4mm 15mm;
+  padding: 3mm 4mm;
+  border-right: 1mm solid #5B3A7D;
+  background: #FAF7FC;
+  border-radius: 0 2mm 2mm 0;
+}
+
+.print-section h3 {
+  font-size: 12pt;
+  font-weight: 700;
+  color: #5B3A7D;
+  margin: 0 0 2mm 0;
+}
+
+.print-section p {
+  font-size: 11pt;
+  line-height: 1.6;
+  margin: 1mm 0;
+  color: #2A1A3D;
+}
+
+.print-rx {
+  min-height: 40mm;
+}
+
+.rx-content p {
+  font-size: 12pt;
+  line-height: 1.8;
+}
+
+/* Footer */
+.print-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 5mm 10mm;
+}
+
+.print-footer .footer-content {
+  border: 0.5mm solid #4CAF50;
+  border-radius: 3mm;
+  padding: 3mm 5mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5mm;
+  background: white;
+}
+
+.print-footer .footer-phone,
+.print-footer .footer-location {
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  color: #5B3A7D;
+  font-size: 11pt;
+  font-weight: 600;
+}
+
+.print-footer .icon-phone {
+  background: #5B3A7D;
+  color: white;
+  width: 8mm;
+  height: 8mm;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10pt;
+}
+
+.print-footer .icon-location {
+  color: #4CAF50;
+  font-size: 12pt;
+}
+
+.print-footer .footer-address {
+  flex: 1;
+  text-align: center;
+  color: #5B3A7D;
+  font-size: 10pt;
+  font-weight: 600;
+}
