@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient, { logout } from "@/lib/api";
-import useWebSocket from "@/hooks/useWebSocket";
+import usePolling from "@/hooks/usePolling";
 import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,6 @@ const SecretaryPage = () => {
   const [shortcuts, setShortcuts] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [otherEditorPresent, setOtherEditorPresent] = useState(false);
   const [tick, setTick] = useState(0);
   const navigate = useNavigate();
 
@@ -62,27 +61,13 @@ const SecretaryPage = () => {
     return () => clearInterval(t);
   }, []);
 
-  const handleWsMessage = useCallback((msg) => {
-    if (msg.event === "patient_field_edit") {
-      // Remote user is editing this patient live
-      if (msg.patient_id === selectedPatient?.id) {
-        live.applyRemoteEdit(msg.patient_id, msg.path, msg.value);
-        setOtherEditorPresent(true);
-        clearTimeout(window.__otherEditorTimer);
-        window.__otherEditorTimer = setTimeout(() => setOtherEditorPresent(false), 3000);
-      }
-    } else if (['patient_created', 'patient_updated', 'patient_deleted'].includes(msg.event)) {
-      fetchPatients();
-      if (msg.event === 'patient_deleted' && msg.data?.id === selectedPatient?.id) {
-        setSelectedPatient(null);
-      }
-    } else if (msg.event === 'shortcut_changed') {
-      fetchShortcuts();
-    }
-  }, [selectedPatient?.id, fetchPatients, fetchShortcuts]);
+  // تحديث قائمة المرضى دورياً بدل الاعتماد على WebSocket (يشتغل على أي استضافة)
+  usePolling(fetchPatients, 4000);
+  // الاختصارات تتغير نادراً، فتحديثها كل 15 ثانية كافٍ
+  usePolling(fetchShortcuts, 15000);
 
-  const { send } = useWebSocket(handleWsMessage);
-  const live = useLivePatient({ patient: selectedPatient, sendWs: send });
+  const live = useLivePatient({ patient: selectedPatient });
+  const otherEditorPresent = live.otherEditorActive;
 
   const handleAddPatient = async (e) => {
     e.preventDefault();

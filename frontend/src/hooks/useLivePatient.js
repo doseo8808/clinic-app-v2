@@ -14,19 +14,27 @@ const emptyExam = () => ({
   prescription: "",
 });
 
+// كل كم ثانية نسأل السيرفر "فيه تحديث جديد؟" بدل الاعتماد على WebSocket
+const POLL_INTERVAL_MS = 2500;
+// كم ثانية تبقى إشارة "يتم التعديل من الجهاز الآخر" ظاهرة بعد آخر تغيير مستلم
+const OTHER_EDITOR_INDICATOR_MS = 4000;
+
 /**
- * Live-synced patient exam hook.
+ * Live-synced patient exam hook (نسخة Polling — بدون WebSocket).
  *
- * - Reads patient by id.
- * - `update(path, value)` updates local state, broadcasts via WS, and debounce-saves to backend.
- * - Applies incoming `patient_field_edit` WS events unless the field is currently focused
- *   locally (avoids overwriting what the user is typing).
- * - `setFocusedField(path)` — call on focus/blur to signal current edit field.
+ * - يقرأ بيانات المريض عند تحديد المريض.
+ * - `update(path, value)` يحدّث الحالة المحلية ويحفظها بعد 400ms (debounce).
+ * - كل 2.5 ثانية يسأل السيرفر عن أحدث نسخة من بيانات المريض، ويدمج أي تغييرات
+ *   جاءت من الجهاز الآخر في الحقول التي لست تكتب فيها حالياً (لا يلمس الحقل الذي عليه تركيز).
+ * - `setFocusedField(path)` — يُستدعى عند focus/blur لتحديد الحقل الذي يُحرَّر حالياً.
+ * - `otherEditorActive` — true مؤقتاً كلما استلمنا تغييراً فعلياً من الجهاز الآخر.
  */
-export default function useLivePatient({ patient, sendWs }) {
+export default function useLivePatient({ patient }) {
   const [data, setData] = useState(emptyExam);
+  const [otherEditorActive, setOtherEditorActive] = useState(false);
   const focusedRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const otherEditorTimerRef = useRef(null);
   const patientIdRef = useRef(patient?.id);
 
   // Load patient snapshot when patient changes
@@ -43,6 +51,66 @@ export default function useLivePatient({ patient, sendWs }) {
     } else {
       setData(emptyExam());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id]);
+
+  // Poll the server periodically for edits made by the other device
+  useEffect(() => {
+    if (!patient?.id) return undefined;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const { data: fresh } = await apiClient.get(`/patients/${patient.id}`);
+        if (cancelled || fresh.id !== patientIdRef.current) return;
+
+        let changed = false;
+        setData(prev => {
+          const next = structuredClone(prev);
+
+          const mergeEye = (side) => {
+            const freshSide = fresh[side] || {};
+            Object.keys(next[side]).forEach((f) => {
+              const path = `${side}.${f}`;
+              const incoming = freshSide[f] ?? "";
+              if (focusedRef.current !== path && next[side][f] !== incoming) {
+                next[side][f] = incoming;
+                changed = true;
+              }
+            });
+          };
+          mergeEye("right_eye");
+          mergeEye("left_eye");
+
+          ["notes", "diagnosis", "prescription"].forEach((f) => {
+            const incoming = fresh[f] ?? "";
+            if (focusedRef.current !== f && next[f] !== incoming) {
+              next[f] = incoming;
+              changed = true;
+            }
+          });
+
+          return changed ? next : prev;
+        });
+
+        if (changed) {
+          setOtherEditorActive(true);
+          clearTimeout(otherEditorTimerRef.current);
+          otherEditorTimerRef.current = setTimeout(
+            () => setOtherEditorActive(false),
+            OTHER_EDITOR_INDICATOR_MS
+          );
+        }
+      } catch (e) { /* silent - سيحاول مرة أخرى بالجولة القادمة */ }
+    };
+
+    const intervalId = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      clearTimeout(otherEditorTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient?.id]);
 
   const setFocusedField = useCallback((path) => {
@@ -78,20 +146,10 @@ export default function useLivePatient({ patient, sendWs }) {
       let obj = next;
       for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
       obj[parts[parts.length - 1]] = value;
-
-      // Broadcast the edit immediately (per-keystroke)
-      if (patientIdRef.current && sendWs) {
-        sendWs({
-          event: "patient_field_edit",
-          patient_id: patientIdRef.current,
-          path,
-          value,
-        });
-      }
       scheduleSave(next);
       return next;
     });
-  }, [sendWs, scheduleSave]);
+  }, [scheduleSave]);
 
   // Batch update (e.g. Normal button fills multiple fields at once)
   const updateMany = useCallback((updates) => {
@@ -102,36 +160,11 @@ export default function useLivePatient({ patient, sendWs }) {
         let obj = next;
         for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
         obj[parts[parts.length - 1]] = value;
-        if (patientIdRef.current && sendWs) {
-          sendWs({
-            event: "patient_field_edit",
-            patient_id: patientIdRef.current,
-            path, value,
-          });
-        }
       });
       scheduleSave(next);
       return next;
     });
-  }, [sendWs, scheduleSave]);
+  }, [scheduleSave]);
 
-  // Apply incoming WS edit from a peer
-  const applyRemoteEdit = useCallback((patientId, path, value) => {
-    if (patientId !== patientIdRef.current) return;
-    // Don't overwrite the field the user is currently editing
-    if (focusedRef.current === path) return;
-    setData(prev => {
-      const next = structuredClone(prev);
-      const parts = path.split(".");
-      let obj = next;
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (obj[parts[i]] === undefined) obj[parts[i]] = {};
-        obj = obj[parts[i]];
-      }
-      obj[parts[parts.length - 1]] = value;
-      return next;
-    });
-  }, []);
-
-  return { data, setData, update, updateMany, setFocusedField, applyRemoteEdit };
+  return { data, setData, update, updateMany, setFocusedField, otherEditorActive };
 }

@@ -44,10 +44,3 @@ export const logout = () => {
   localStorage.removeItem("clinic_role");
 };
 
-export const getWsUrl = () => {
-  const pin = getPin();
-  if (!pin) return null;
-  let base = BACKEND_URL || window.location.origin;
-  base = base.replace(/^http/, "ws");
-  return `${base}/ws/updates?pin=${encodeURIComponent(pin)}`;
-};

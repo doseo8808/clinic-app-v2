@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient, { logout } from "@/lib/api";
-import useWebSocket from "@/hooks/useWebSocket";
+import usePolling from "@/hooks/usePolling";
 import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,13 +29,35 @@ const DoctorPage = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [bellRinging, setBellRinging] = useState(false);
-  const [otherEditorPresent, setOtherEditorPresent] = useState(false);
   const navigate = useNavigate();
+  const knownPatientIdsRef = useRef(null); // null = لسه ما جبنا القائمة أول مرة
+  const selectedPatientIdRef = useRef(null);
+
+  useEffect(() => { selectedPatientIdRef.current = selectedPatient?.id || null; }, [selectedPatient?.id]);
 
   const fetchPendingPatients = useCallback(async () => {
     try {
       const { data } = await apiClient.get('/patients');
-      setPendingPatients(data.filter(p => p.status !== 'completed'));
+      const pending = data.filter(p => p.status !== 'completed');
+
+      // اكتشاف مرضى جدد وصلوا من السكرتير منذ آخر تحديث (بديل حدث patient_created عبر WebSocket)
+      if (knownPatientIdsRef.current) {
+        const newOnes = pending.filter(p => !knownPatientIdsRef.current.has(p.id));
+        if (newOnes.length > 0) {
+          setNotifCount(c => c + newOnes.length);
+          setBellRinging(true);
+          setTimeout(() => setBellRinging(false), 3000);
+          newOnes.forEach(p => toast.info(`🔔 مريض جديد: ${p.name}`));
+        }
+      }
+      knownPatientIdsRef.current = new Set(pending.map(p => p.id));
+
+      // إذا المريض المفتوح حالياً حُذف أو أُكمل من جهاز آخر، نرجع للقائمة
+      if (selectedPatientIdRef.current && !pending.some(p => p.id === selectedPatientIdRef.current)) {
+        setSelectedPatient(null);
+      }
+
+      setPendingPatients(pending);
     } catch (e) { /* silent */ }
   }, []);
 
@@ -48,32 +70,12 @@ const DoctorPage = () => {
 
   useEffect(() => { fetchPendingPatients(); fetchShortcuts(); }, [fetchPendingPatients, fetchShortcuts]);
 
-  const handleWsMessage = useCallback((msg) => {
-    if (msg.event === "patient_field_edit") {
-      if (msg.patient_id === selectedPatient?.id) {
-        live.applyRemoteEdit(msg.patient_id, msg.path, msg.value);
-        setOtherEditorPresent(true);
-        clearTimeout(window.__doctorEditorTimer);
-        window.__doctorEditorTimer = setTimeout(() => setOtherEditorPresent(false), 3000);
-      }
-    } else if (msg.event === 'patient_created') {
-      fetchPendingPatients();
-      setNotifCount(c => c + 1);
-      setBellRinging(true);
-      setTimeout(() => setBellRinging(false), 3000);
-      toast.info(`🔔 مريض جديد: ${msg.data?.name || ''}`);
-    } else if (['patient_updated', 'patient_deleted'].includes(msg.event)) {
-      fetchPendingPatients();
-      if (msg.event === 'patient_deleted' && msg.data?.id === selectedPatient?.id) {
-        setSelectedPatient(null);
-      }
-    } else if (msg.event === 'shortcut_changed') {
-      fetchShortcuts();
-    }
-  }, [selectedPatient?.id, fetchPendingPatients, fetchShortcuts]);
+  // تحديث دوري بدل الاعتماد على WebSocket (يشتغل على أي استضافة)
+  usePolling(fetchPendingPatients, 4000);
+  usePolling(fetchShortcuts, 15000);
 
-  const { send } = useWebSocket(handleWsMessage);
-  const live = useLivePatient({ patient: selectedPatient, sendWs: send });
+  const live = useLivePatient({ patient: selectedPatient });
+  const otherEditorPresent = live.otherEditorActive;
 
   const clearNotifications = () => { setNotifCount(0); setBellRinging(false); };
 
