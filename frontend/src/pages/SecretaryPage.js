@@ -6,7 +6,7 @@ import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { UserPlus, LogOut, Eye, RefreshCw, Send, ArrowLeft, Printer, CheckCircle2, Archive } from "lucide-react";
+import { UserPlus, LogOut, Eye, RefreshCw, Send, ArrowLeft, Printer, CheckCircle2, Archive, CalendarPlus, CalendarClock, Trash2, UserCheck } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
 
@@ -26,6 +26,15 @@ const formatWaitingTime = (createdAt) => {
   return `${h}س ${m}د`;
 };
 
+const formatAppointment = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const dateStr = d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+  const timeStr = d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} - ${timeStr}`;
+};
+
 const SecretaryPage = () => {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -37,6 +46,16 @@ const SecretaryPage = () => {
   const [tick, setTick] = useState(0);
   const navigate = useNavigate();
 
+  // Appointments (future bookings / follow-up visits)
+  const [appointments, setAppointments] = useState([]);
+  const [showBookingForm, setShowBookingForm] = useState(false);
+  const [apptName, setApptName] = useState("");
+  const [apptAge, setApptAge] = useState("");
+  const [apptDate, setApptDate] = useState("");
+  const [apptTime, setApptTime] = useState("");
+  const [apptNote, setApptNote] = useState("");
+  const [bookingSaving, setBookingSaving] = useState(false);
+
   const today = new Date().toLocaleDateString('ar-EG', {
     year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -44,7 +63,17 @@ const SecretaryPage = () => {
   const fetchPatients = useCallback(async () => {
     try {
       const { data } = await apiClient.get('/patients');
-      setPatients(data.filter(p => p.status !== 'completed'));
+      setPatients(data.filter(p => p.status !== 'completed' && p.status !== 'scheduled'));
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const fetchAppointments = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get('/patients', { params: { status: 'scheduled' } });
+      const sorted = [...data].sort((a, b) =>
+        new Date(a.appointment_date || 0) - new Date(b.appointment_date || 0)
+      );
+      setAppointments(sorted);
     } catch (e) { /* silent */ }
   }, []);
 
@@ -55,7 +84,7 @@ const SecretaryPage = () => {
     } catch (e) { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchPatients(); fetchShortcuts(); }, [fetchPatients, fetchShortcuts]);
+  useEffect(() => { fetchPatients(); fetchShortcuts(); fetchAppointments(); }, [fetchPatients, fetchShortcuts, fetchAppointments]);
 
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 30000);
@@ -71,15 +100,16 @@ const SecretaryPage = () => {
         clearTimeout(window.__otherEditorTimer);
         window.__otherEditorTimer = setTimeout(() => setOtherEditorPresent(false), 3000);
       }
-    } else if (['patient_created', 'patient_updated', 'patient_deleted'].includes(msg.event)) {
+    } else if (['patient_created', 'patient_updated', 'patient_deleted', 'appointment_created'].includes(msg.event)) {
       fetchPatients();
+      fetchAppointments();
       if (msg.event === 'patient_deleted' && msg.data?.id === selectedPatient?.id) {
         setSelectedPatient(null);
       }
     } else if (msg.event === 'shortcut_changed') {
       fetchShortcuts();
     }
-  }, [selectedPatient?.id, fetchPatients, fetchShortcuts]);
+  }, [selectedPatient?.id, fetchPatients, fetchAppointments, fetchShortcuts]);
 
   const { send } = useWebSocket(handleWsMessage);
   const live = useLivePatient({ patient: selectedPatient, sendWs: send });
@@ -98,6 +128,45 @@ const SecretaryPage = () => {
     } catch (err) {
       toast.error(err.response?.data?.detail || "خطأ في الإرسال");
     } finally { setSaving(false); }
+  };
+
+  const handleBookAppointment = async (e) => {
+    e.preventDefault();
+    if (!apptName.trim() || !apptAge || !apptDate || !apptTime) {
+      toast.error("الاسم والعمر والتاريخ والوقت مطلوبون"); return;
+    }
+    setBookingSaving(true);
+    try {
+      await apiClient.post('/patients', {
+        name: apptName.trim(), age: parseInt(apptAge), date: today,
+        status: 'scheduled',
+        appointment_date: `${apptDate}T${apptTime}`,
+        appointment_note: apptNote.trim(),
+      });
+      toast.success("تم حجز الموعد");
+      setApptName(""); setApptAge(""); setApptDate(""); setApptTime(""); setApptNote("");
+      setShowBookingForm(false);
+      fetchAppointments();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "خطأ في حجز الموعد");
+    } finally { setBookingSaving(false); }
+  };
+
+  const handlePatientArrived = async (appt) => {
+    try {
+      await apiClient.put(`/patients/${appt.id}`, { status: 'pending' });
+      toast.success(`${appt.name} أصبح بغرفة الانتظار`);
+      fetchAppointments();
+      fetchPatients();
+    } catch (e) { toast.error("خطأ في تحديث الحالة"); }
+  };
+
+  const handleCancelAppointment = async (appt) => {
+    try {
+      await apiClient.delete(`/patients/${appt.id}`);
+      toast.success("تم إلغاء الموعد");
+      fetchAppointments();
+    } catch (e) { toast.error("خطأ في إلغاء الموعد"); }
   };
 
   const handleSelectPatient = (p) => setSelectedPatient(p);
@@ -194,7 +263,8 @@ const SecretaryPage = () => {
           />
         </main>
       ) : (
-        <main className="max-w-6xl mx-auto px-6 py-8 grid lg:grid-cols-2 gap-6 no-print">
+        <main className="max-w-6xl mx-auto px-6 py-8 no-print space-y-6">
+        <div className="grid lg:grid-cols-2 gap-6">
           {/* Registration */}
           <section>
             <div className="bg-white rounded-2xl border border-slate-200 p-8">
@@ -292,6 +362,121 @@ const SecretaryPage = () => {
               </div>
             </div>
           </section>
+        </div>
+
+        {/* Upcoming Appointments */}
+        <section>
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#EAF6EC] flex items-center justify-center">
+                  <CalendarClock className="w-5 h-5 text-[#2E7D32]" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-[#1F2937]">المواعيد القادمة</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    <span className="font-semibold text-[#5B3A7D]">{appointments.length}</span> موعد محجوز
+                  </p>
+                </div>
+              </div>
+              <Button
+                data-testid="toggle-booking-form-button"
+                variant={showBookingForm ? "outline" : "default"}
+                size="sm"
+                onClick={() => setShowBookingForm(v => !v)}
+                className={!showBookingForm ? "bg-[#5B3A7D] hover:bg-[#4A2E68]" : ""}
+              >
+                <CalendarPlus className="w-4 h-4 ms-1" />
+                {showBookingForm ? "إلغاء" : "حجز موعد جديد"}
+              </Button>
+            </div>
+
+            {showBookingForm && (
+              <form
+                onSubmit={handleBookAppointment}
+                className="grid sm:grid-cols-2 gap-3 p-4 mb-4 bg-[#FAF7FC] rounded-xl border border-[#E0D5EC]"
+              >
+                <Input
+                  data-testid="appt-name-input"
+                  value={apptName} onChange={(e) => setApptName(e.target.value)}
+                  placeholder="اسم المريض" className="h-11" maxLength={200}
+                />
+                <Input
+                  data-testid="appt-age-input"
+                  type="number" value={apptAge} onChange={(e) => setApptAge(e.target.value)}
+                  placeholder="العمر" className="h-11" min="0" max="150"
+                />
+                <Input
+                  data-testid="appt-date-input"
+                  type="date" value={apptDate} onChange={(e) => setApptDate(e.target.value)}
+                  className="h-11"
+                />
+                <Input
+                  data-testid="appt-time-input"
+                  type="time" value={apptTime} onChange={(e) => setApptTime(e.target.value)}
+                  className="h-11"
+                />
+                <Input
+                  data-testid="appt-note-input"
+                  value={apptNote} onChange={(e) => setApptNote(e.target.value)}
+                  placeholder="ملاحظة (اختياري) - مثلاً: مراجعة بعد عملية"
+                  className="h-11 sm:col-span-2"
+                />
+                <Button
+                  data-testid="appt-submit-button"
+                  type="submit" disabled={bookingSaving}
+                  className="sm:col-span-2 h-11 bg-[#2E7D32] hover:bg-[#256428]"
+                >
+                  {bookingSaving ? "جاري الحجز..." : "تأكيد الحجز"}
+                </Button>
+              </form>
+            )}
+
+            {appointments.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">
+                <CalendarClock className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد مواعيد محجوزة حالياً</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {appointments.map((a) => (
+                  <div
+                    key={a.id}
+                    data-testid={`appointment-item-${a.id}`}
+                    className="flex items-center justify-between p-4 rounded-xl border border-slate-200"
+                  >
+                    <div>
+                      <p className="font-semibold text-[#1F2937]">{a.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {a.age} سنة • <span className="text-[#2E7D32] font-medium">{formatAppointment(a.appointment_date)}</span>
+                      </p>
+                      {a.appointment_note && (
+                        <p className="text-xs text-slate-400 mt-1">{a.appointment_note}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        data-testid={`appt-arrived-button-${a.id}`}
+                        size="sm" variant="outline"
+                        onClick={() => handlePatientArrived(a)}
+                      >
+                        <UserCheck className="w-4 h-4 ms-1" />
+                        المريض وصل
+                      </Button>
+                      <Button
+                        data-testid={`appt-cancel-button-${a.id}`}
+                        size="sm" variant="ghost"
+                        onClick={() => handleCancelAppointment(a)}
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
         </main>
       )}
 

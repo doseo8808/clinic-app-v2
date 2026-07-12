@@ -300,9 +300,10 @@
   width: 90mm;
 }
 
-.print-watermark svg {
+.print-watermark-logo {
   width: 60mm;
   height: auto;
+  display: block;
 }
 
 .print-watermark p {

@@ -111,6 +111,9 @@ async def init_db():
                     'right_eye_lens', 'left_eye_lens',
                     'right_eye_retina', 'left_eye_retina']:
             await ensure_column(db, 'patients', col, 'TEXT DEFAULT ""')
+        # Appointment scheduling (future bookings + follow-up dates)
+        await ensure_column(db, 'patients', 'appointment_date', 'TEXT')
+        await ensure_column(db, 'patients', 'appointment_note', 'TEXT DEFAULT ""')
         # Shortcut color
         await ensure_column(db, 'shortcuts', 'color', 'TEXT DEFAULT "#5B3A7D"')
         # Indexes
@@ -210,6 +213,8 @@ class Patient(BaseModel):
     diagnosis: Optional[constr(max_length=5000)] = ""
     prescription: Optional[constr(max_length=10000)] = ""
     status: str = "pending"
+    appointment_date: Optional[constr(max_length=50)] = None
+    appointment_note: Optional[constr(max_length=1000)] = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
 
@@ -218,6 +223,9 @@ class PatientCreate(BaseModel):
     name: constr(min_length=1, max_length=200)
     age: conint(ge=0, le=150)
     date: constr(max_length=100)
+    status: Optional[constr(max_length=50)] = "pending"
+    appointment_date: Optional[constr(max_length=50)] = None
+    appointment_note: Optional[constr(max_length=1000)] = ""
 
 
 class PatientUpdate(BaseModel):
@@ -227,6 +235,8 @@ class PatientUpdate(BaseModel):
     diagnosis: Optional[constr(max_length=5000)] = None
     prescription: Optional[constr(max_length=10000)] = None
     status: Optional[constr(max_length=50)] = None
+    appointment_date: Optional[constr(max_length=50)] = None
+    appointment_note: Optional[constr(max_length=1000)] = None
 
 
 class StatusUpdate(BaseModel):
@@ -269,6 +279,8 @@ def row_to_patient(row) -> dict:
         'right_eye': eye('right'), 'left_eye': eye('left'),
         'notes': row['notes'] or '', 'diagnosis': row['diagnosis'] or '',
         'prescription': row['prescription'] or '', 'status': row['status'],
+        'appointment_date': row['appointment_date'] if 'appointment_date' in row.keys() else None,
+        'appointment_note': (row['appointment_note'] if 'appointment_note' in row.keys() else '') or '',
         'created_at': datetime.fromisoformat(row['created_at']),
         'updated_at': datetime.fromisoformat(row['updated_at']) if row['updated_at'] else None,
     }
@@ -332,14 +344,21 @@ async def websocket_endpoint(websocket: WebSocket, pin: str = Query(...)):
 @api_router.post("/patients", response_model=Patient, dependencies=[Depends(verify_pin)])
 @limiter.limit("60/minute")
 async def create_patient(request: Request, input: PatientCreate):
-    patient = Patient(name=input.name, age=input.age, date=input.date)
+    status = input.status if input.status in ("pending", "scheduled") else "pending"
+    patient = Patient(
+        name=input.name, age=input.age, date=input.date, status=status,
+        appointment_date=input.appointment_date, appointment_note=input.appointment_note or "",
+    )
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            "INSERT INTO patients (id, name, age, date, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (patient.id, patient.name, patient.age, patient.date, patient.status, patient.created_at.isoformat())
+            "INSERT INTO patients (id, name, age, date, status, appointment_date, appointment_note, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (patient.id, patient.name, patient.age, patient.date, patient.status,
+             patient.appointment_date, patient.appointment_note, patient.created_at.isoformat())
         )
         await db.commit()
-    await manager.broadcast("patient_created", {"id": patient.id, "name": patient.name})
+    event = "appointment_created" if status == "scheduled" else "patient_created"
+    await manager.broadcast(event, {"id": patient.id, "name": patient.name})
     return patient
 
 
@@ -393,7 +412,9 @@ async def update_patient(request: Request, patient_id: str, input: PatientUpdate
                 update_fields.append(f"left_eye_{f} = ?")
                 params.append(getattr(input.left_eye, f) or '')
         for name, val in [('notes', input.notes), ('diagnosis', input.diagnosis),
-                          ('prescription', input.prescription), ('status', input.status)]:
+                          ('prescription', input.prescription), ('status', input.status),
+                          ('appointment_date', input.appointment_date),
+                          ('appointment_note', input.appointment_note)]:
             if val is not None:
                 update_fields.append(f"{name} = ?")
                 params.append(val)

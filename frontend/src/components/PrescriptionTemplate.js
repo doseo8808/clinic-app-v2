@@ -1,31 +1,13 @@
 import { forwardRef } from "react";
+import eyeLogoSrc from "@/assets/eye-logo.png";
 
 /**
- * Approximate reproduction of the clinic's eye/wing logo, built from scratch
- * as an inline SVG since no clean source asset was provided. Used both as
- * the small header mark and as a large faded watermark.
+ * The clinic's actual eye logo (extracted from the reference design,
+ * background removed). Used both as the small header mark and, at low
+ * opacity, as a large watermark behind the prescription area.
  */
-const EyeLogo = ({ className, opacity = 1, showText = true, color = "#5B3A7D" }) => (
-  <svg viewBox="0 0 200 150" className={className} style={{ opacity }} aria-hidden="true">
-    <path
-      d="M15,74 C8,40 46,13 96,15 C146,17 179,29 189,17"
-      fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
-    />
-    <path
-      d="M15,74 C10,102 43,120 89,114 C125,109 149,92 159,74"
-      fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
-    />
-    <circle cx="58" cy="70" r="20" fill="none" stroke="#4CAF50" strokeWidth="7" />
-    <circle cx="58" cy="70" r="7" fill={color} />
-    {showText && (
-      <text
-        x="100" y="145" fontFamily="Georgia, 'Times New Roman', serif"
-        fontStyle="italic" fontSize="26" fill={color} textAnchor="middle"
-      >
-        phthalmo.
-      </text>
-    )}
-  </svg>
+const EyeLogo = ({ className, style }) => (
+  <img src={eyeLogoSrc} alt="" className={className} style={style} />
 );
 
 /**
@@ -131,7 +113,7 @@ const PrescriptionTemplate = forwardRef(({ patient, examData }, ref) => {
       {/* Prescription (watermark sits behind this blank/whitespace area) */}
       <div className="print-section print-rx">
         <div className="print-watermark">
-          <EyeLogo opacity={0.08} />
+          <EyeLogo className="print-watermark-logo" style={{ opacity: 0.08 }} />
           <p>عيادة السراج لطب العيون</p>
         </div>
         <h3>Rx / الوصفة الطبية:</h3>
