@@ -18,9 +18,7 @@ node_modules/
 .pnp
 .pnp.js
 frontend/build/
-# ملاحظة: backend/frontend_build/ لم يعد مستثنى عمداً - يُرفع مع الكود
-# لأن PythonAnywhere (والاستضافات المشابهة بدون Docker) تحتاج النسخة المبنية
-# جاهزة مباشرة، بدون خطوة "yarn build" على السيرفر نفسه.
+backend/frontend_build/
 .yarn/cache
 .yarn/install-state.gz
 .eslintcache

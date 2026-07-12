@@ -26,7 +26,17 @@ const ExamForm = forwardRef(function ExamForm({
   const { data, update, updateMany, setFocusedField } = live;
 
   const applyNormal = () => {
+    const normalEyeValues = {
+      ucva: "6/6", sph: "0.00", cyl: "0.00", ax: "0",
+      bcva: "6/6", near: "N6", iop: "14",
+    };
+    const eyeUpdates = ["right_eye", "left_eye"].flatMap((eye) =>
+      Object.entries(normalEyeValues).map(([key, value]) => ({
+        path: `${eye}.${key}`, value,
+      }))
+    );
     updateMany([
+      ...eyeUpdates,
       { path: "right_eye.lid", value: "Normal" },
       { path: "right_eye.cornea", value: "Normal" },
       { path: "right_eye.lens", value: "Normal" },

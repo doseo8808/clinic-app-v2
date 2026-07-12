@@ -12,6 +12,15 @@
   visibility: hidden;
 }
 
+/* Force background colors/borders to print even if the browser's
+   "background graphics" print option is left unchecked by the user.
+   This is the most common reason a colorful design prints as plain text. */
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
 @media print {
   /* Hide everything, show only the print page */
   body * {
@@ -44,7 +53,7 @@
 /* Prescription page layout */
 .print-page {
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
   padding: 0;
   margin: 0 auto;
   background: white;
@@ -53,6 +62,9 @@
   position: relative;
   box-sizing: border-box;
   direction: rtl;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Top decorative border */
@@ -85,9 +97,10 @@
 .print-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  padding: 5mm 15mm;
-  gap: 10mm;
+  align-items: center;
+  padding: 3mm 15mm 2mm;
+  gap: 3mm;
+  position: relative;
 }
 
 .print-header-en {
@@ -98,22 +111,22 @@
 }
 
 .print-header-en h1 {
-  font-size: 22pt;
+  font-size: 18pt;
   font-weight: 700;
-  margin: 2mm 0 1mm 0;
+  margin: 1mm 0;
   color: #5B3A7D;
 }
 
 .print-header-en h2 {
-  font-size: 12pt;
+  font-size: 11pt;
   font-weight: 500;
   margin: 0;
   color: #5B3A7D;
 }
 
 .print-header-en p {
-  font-size: 11pt;
-  margin: 1mm 0;
+  font-size: 10pt;
+  margin: 0.5mm 0;
   color: #5B3A7D;
 }
 
@@ -124,55 +137,54 @@
 }
 
 .print-header-ar h1 {
-  font-size: 20pt;
+  font-size: 14pt;
   font-weight: 800;
-  margin: 0 0 3mm 0;
+  margin: 2mm 0 0 0;
   color: #5B3A7D;
 }
 
 .print-header-ar .doctor-title {
-  font-size: 12pt;
-  margin: 1mm 0;
-  color: #5B3A7D;
-}
-
-.print-header-ar .doctor-name {
-  font-size: 18pt;
-  font-weight: 700;
-  margin: 1mm 0;
-  color: #5B3A7D;
-}
-
-.print-header-ar .doctor-cred {
   font-size: 10pt;
   margin: 0.5mm 0;
   color: #5B3A7D;
 }
 
-/* Stamp circle */
-.print-stamp-circle {
-  width: 30mm;
-  height: 30mm;
-  border: 2mm solid #5B3A7D;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.print-header-ar .doctor-name {
+  font-size: 13pt;
+  font-weight: 700;
+  margin: 0.5mm 0;
   color: #5B3A7D;
-  font-size: 10pt;
-  opacity: 0.4;
+}
+
+.print-header-ar .doctor-cred {
+  font-size: 8pt;
+  margin: 0.3mm 0;
+  color: #5B3A7D;
+}
+
+/* Eye logo mark, overlapping the center of the header */
+.print-header-logo {
+  width: 34mm;
+  height: auto;
   flex-shrink: 0;
+  margin: 0 -6mm;
+  position: relative;
+  z-index: 2;
 }
 
 /* Patient info bar */
 .print-patient-info {
-  display: flex;
-  gap: 8mm;
   padding: 3mm 15mm;
-  margin-top: 3mm;
+  margin-top: 2mm;
   border-top: 0.5mm solid #E0D5EC;
   border-bottom: 0.5mm solid #E0D5EC;
   font-size: 11pt;
+}
+
+.print-patient-info .info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1.5mm 0;
 }
 
 .print-patient-info .info-field {
@@ -262,65 +274,95 @@
 }
 
 .print-rx {
-  min-height: 40mm;
+  min-height: 55mm;
+  position: relative;
+  overflow: hidden;
 }
 
 .rx-content p {
   font-size: 12pt;
   line-height: 1.8;
+  position: relative;
+  z-index: 1;
 }
 
-/* Footer */
-.print-footer {
+/* Faded watermark centered behind the (usually blank) Rx area */
+.print-watermark {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 5mm 10mm;
-}
-
-.print-footer .footer-content {
-  border: 0.5mm solid #4CAF50;
-  border-radius: 3mm;
-  padding: 3mm 5mm;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  gap: 5mm;
-  background: white;
+  pointer-events: none;
+  z-index: 0;
+  width: 90mm;
 }
 
-.print-footer .footer-phone,
-.print-footer .footer-location {
+.print-watermark svg {
+  width: 60mm;
+  height: auto;
+}
+
+.print-watermark p {
+  color: #5B3A7D;
+  opacity: 0.08;
+  font-weight: 800;
+  font-size: 14pt;
+  margin: 2mm 0 0 0;
+  text-align: center;
+}
+
+/* Footer: two-tone pill (solid purple phone segment + outlined address segment) */
+.print-footer-v2 {
+  margin: auto 10mm 8mm;
+  display: flex;
+  align-items: stretch;
+  border: 0.5mm solid #4CAF50;
+  border-radius: 8mm;
+  overflow: hidden;
+}
+
+.print-footer-v2 .footer-phone-pill {
+  background: #5B3A7D;
+  color: white;
   display: flex;
   align-items: center;
   gap: 2mm;
-  color: #5B3A7D;
+  padding: 3mm 6mm;
   font-size: 11pt;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.print-footer-v2 .icon-phone {
+  font-size: 11pt;
+}
+
+.print-footer-v2 .footer-address-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3mm;
+  padding: 2mm 5mm;
+  background: white;
+}
+
+.print-footer-v2 .footer-address-lines {
+  text-align: center;
+  flex: 1;
+}
+
+.print-footer-v2 .footer-address-lines p {
+  margin: 0.3mm 0;
+  color: #5B3A7D;
+  font-size: 9pt;
   font-weight: 600;
 }
 
-.print-footer .icon-phone {
-  background: #5B3A7D;
-  color: white;
-  width: 8mm;
-  height: 8mm;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10pt;
-}
-
-.print-footer .icon-location {
+.print-footer-v2 .icon-location {
   color: #4CAF50;
   font-size: 12pt;
-}
-
-.print-footer .footer-address {
-  flex: 1;
-  text-align: center;
-  color: #5B3A7D;
-  font-size: 10pt;
-  font-weight: 600;
 }

@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient, { logout, getRole } from "@/lib/api";
+import useWebSocket from "@/hooks/useWebSocket";
+import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar } from "lucide-react";
+import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar, Pencil } from "lucide-react";
+import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
 
 const formatDate = (iso) => {
@@ -23,6 +26,8 @@ const RecordsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [editingPatient, setEditingPatient] = useState(null);
+  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const role = getRole();
 
@@ -40,7 +45,22 @@ const RecordsPage = () => {
     }
   }, []);
 
-  useEffect(() => { fetchRecords(); }, [fetchRecords]);
+  useEffect(() => { fetchRecords(searchTerm); }, [fetchRecords]);
+
+  // Live refresh: reflect new/edited/deleted completed records immediately,
+  // without needing a manual refresh button.
+  const handleWsMessage = useCallback((msg) => {
+    if (msg.event === "patient_field_edit") {
+      if (msg.patient_id === editingPatient?.id) {
+        live.applyRemoteEdit(msg.patient_id, msg.path, msg.value);
+      }
+    } else if (["patient_created", "patient_updated", "patient_deleted"].includes(msg.event)) {
+      fetchRecords(searchTerm);
+    }
+  }, [fetchRecords, searchTerm, editingPatient?.id]);
+
+  const { send } = useWebSocket(handleWsMessage);
+  const live = useLivePatient({ patient: editingPatient, sendWs: send });
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -53,6 +73,44 @@ const RecordsPage = () => {
   const handlePrint = (record) => {
     setSelected(record);
     setTimeout(() => window.print(), 150);
+  };
+
+  const handleEdit = (record) => setEditingPatient(record);
+  const handleCloseEdit = () => setEditingPatient(null);
+
+  const handleSaveEdit = async () => {
+    if (!editingPatient) return;
+    setSaving(true);
+    try {
+      await apiClient.put(`/patients/${editingPatient.id}`, {
+        ...live.data, status: "completed",
+      });
+      toast.success("تم حفظ التعديلات");
+      setEditingPatient(null);
+      fetchRecords(searchTerm);
+    } catch (e) {
+      toast.error("خطأ في حفظ التعديلات");
+    } finally { setSaving(false); }
+  };
+
+  const handleSaveEditAndPrint = async () => {
+    if (!editingPatient) return;
+    setSaving(true);
+    try {
+      await apiClient.put(`/patients/${editingPatient.id}`, {
+        ...live.data, status: "completed",
+      });
+      toast.success("تم الحفظ - جاري الطباعة");
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          setEditingPatient(null);
+          fetchRecords(searchTerm);
+        }, 500);
+      }, 300);
+    } catch (e) {
+      toast.error("خطأ في حفظ التعديلات");
+    } finally { setSaving(false); }
   };
 
   return (
@@ -82,6 +140,29 @@ const RecordsPage = () => {
         </div>
       </header>
 
+      {/* Edit mode: reuse the shared exam form */}
+      {editingPatient ? (
+        <main className="max-w-5xl mx-auto px-6 py-6 no-print">
+          <div className="mb-4">
+            <Button
+              data-testid="cancel-edit-record-button"
+              variant="ghost" size="sm"
+              onClick={handleCloseEdit}
+            >
+              <ArrowLeft className="w-4 h-4 ms-1 rtl-flip" />
+              رجوع للسجل بدون حفظ
+            </Button>
+          </div>
+          <ExamForm
+            patient={editingPatient}
+            live={live}
+            shortcuts={[]}
+            onSaveOnly={handleSaveEdit}
+            onSavePrint={handleSaveEditAndPrint}
+            saving={saving}
+          />
+        </main>
+      ) : (
       <main className="max-w-6xl mx-auto px-6 py-8 no-print">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
           <form onSubmit={handleSearch} className="flex gap-2">
@@ -131,23 +212,37 @@ const RecordsPage = () => {
                       </p>
                     )}
                   </div>
-                  <Button
-                    data-testid={`print-record-button-${r.id}`}
-                    variant="outline" size="sm"
-                    onClick={() => handlePrint(r)}
-                  >
-                    <Printer className="w-4 h-4 ms-1" />
-                    طباعة
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      data-testid={`edit-record-button-${r.id}`}
+                      variant="outline" size="sm"
+                      onClick={() => handleEdit(r)}
+                    >
+                      <Pencil className="w-4 h-4 ms-1" />
+                      تعديل
+                    </Button>
+                    <Button
+                      data-testid={`print-record-button-${r.id}`}
+                      variant="outline" size="sm"
+                      onClick={() => handlePrint(r)}
+                    >
+                      <Printer className="w-4 h-4 ms-1" />
+                      طباعة
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </main>
+      )}
 
       <div className="print-container">
-        <PrescriptionTemplate patient={selected} examData={selected} />
+        <PrescriptionTemplate
+          patient={editingPatient || selected}
+          examData={editingPatient ? live.data : selected}
+        />
       </div>
     </div>
   );

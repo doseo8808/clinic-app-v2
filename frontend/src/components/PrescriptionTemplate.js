@@ -1,8 +1,37 @@
 import { forwardRef } from "react";
 
 /**
+ * Approximate reproduction of the clinic's eye/wing logo, built from scratch
+ * as an inline SVG since no clean source asset was provided. Used both as
+ * the small header mark and as a large faded watermark.
+ */
+const EyeLogo = ({ className, opacity = 1, showText = true, color = "#5B3A7D" }) => (
+  <svg viewBox="0 0 200 150" className={className} style={{ opacity }} aria-hidden="true">
+    <path
+      d="M15,74 C8,40 46,13 96,15 C146,17 179,29 189,17"
+      fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
+    />
+    <path
+      d="M15,74 C10,102 43,120 89,114 C125,109 149,92 159,74"
+      fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
+    />
+    <circle cx="58" cy="70" r="20" fill="none" stroke="#4CAF50" strokeWidth="7" />
+    <circle cx="58" cy="70" r="7" fill={color} />
+    {showText && (
+      <text
+        x="100" y="145" fontFamily="Georgia, 'Times New Roman', serif"
+        fontStyle="italic" fontSize="26" fill={color} textAnchor="middle"
+      >
+        phthalmo.
+      </text>
+    )}
+  </svg>
+);
+
+/**
  * Prescription print template - matches the clinic's official design.
- * Purple/green ornate frame, bilingual header, R/L eye exam table, footer.
+ * Purple/green frame, bilingual header with eye-logo mark, watermark,
+ * R/L eye exam table, two-tone pill footer.
  * Only rendered visually when printing (screen: hidden by container).
  */
 const PrescriptionTemplate = forwardRef(({ patient, examData }, ref) => {
@@ -18,43 +47,46 @@ const PrescriptionTemplate = forwardRef(({ patient, examData }, ref) => {
         <div className="border-green"></div>
       </div>
 
-      {/* Header: bilingual clinic name + doctor */}
+      {/* Header: bilingual clinic name + doctor, with eye logo overlapping center */}
       <div className="print-header">
-        <div className="print-header-en">
-          <h2>Ophth.Consultant</h2>
-          <h1>Wesen Abdulaziz</h1>
-          <p>A.B.C. Ophth</p>
-        </div>
-        <div className="print-stamp-circle">
-          <span>الختم</span>
-        </div>
         <div className="print-header-ar">
-          <h1>عيادة السراج لطب العيون</h1>
           <p className="doctor-title">الطبيب الاستشاري</p>
           <p className="doctor-name">د.وسن عبد العزيز رشيد</p>
           <p className="doctor-cred">بورد (دكتوراه) عربي طب وجراحة العيون</p>
           <p className="doctor-cred">زميل المجلس العالمي طب وجراحة العيون</p>
+          <h1>عيادة السراج لطب العيون</h1>
+        </div>
+        <EyeLogo className="print-header-logo" />
+        <div className="print-header-en">
+          <h2>ophth.Consultant</h2>
+          <h1>Wesen Abdulaziz</h1>
+          <p>A.B.C. Ophth</p>
+          <p>I.C.O</p>
         </div>
       </div>
 
       {/* Patient info */}
       <div className="print-patient-info">
-        <div className="info-field">
-          <span className="info-label">اسم المريض:</span>
-          <span className="info-value">{patient?.name || ''}</span>
+        <div className="info-row">
+          <div className="info-field">
+            <span className="info-label">اسم المريض :</span>
+            <span className="info-value">{patient?.name || ''}</span>
+          </div>
+          <div className="info-field">
+            <span className="info-label">التاريخ:</span>
+            <span className="info-value">{today}</span>
+          </div>
         </div>
-        <div className="info-field">
-          <span className="info-label">العمر:</span>
-          <span className="info-value">{patient?.age || ''} سنة</span>
-        </div>
-        <div className="info-field">
-          <span className="info-label">التاريخ:</span>
-          <span className="info-value">{today}</span>
+        <div className="info-row">
+          <div className="info-field">
+            <span className="info-label">العمر :</span>
+            <span className="info-value">{patient?.age || ''} سنة</span>
+          </div>
         </div>
       </div>
 
-      {/* Eye exam table */}
-      <table className="print-eye-table">
+      {/* Eye exam table (label column first, LTR reading order to match layout) */}
+      <table className="print-eye-table" dir="ltr">
         <thead>
           <tr>
             <th></th>
@@ -96,8 +128,12 @@ const PrescriptionTemplate = forwardRef(({ patient, examData }, ref) => {
         </div>
       )}
 
-      {/* Prescription */}
+      {/* Prescription (watermark sits behind this blank/whitespace area) */}
       <div className="print-section print-rx">
+        <div className="print-watermark">
+          <EyeLogo opacity={0.08} />
+          <p>عيادة السراج لطب العيون</p>
+        </div>
         <h3>Rx / الوصفة الطبية:</h3>
         <div className="rx-content">
           {(examData?.prescription || '').split('\n').map((line, i) => (
@@ -114,19 +150,18 @@ const PrescriptionTemplate = forwardRef(({ patient, examData }, ref) => {
         </div>
       )}
 
-      {/* Bottom border with contact */}
-      <div className="print-footer">
-        <div className="footer-content">
-          <div className="footer-phone">
-            <span className="icon-phone">☎</span>
-            <span>07808877969</span>
+      {/* Bottom two-tone pill footer */}
+      <div className="print-footer-v2" dir="ltr">
+        <div className="footer-phone-pill">
+          <span className="icon-phone">☎</span>
+          <span>07808877969</span>
+        </div>
+        <div className="footer-address-pill">
+          <div className="footer-address-lines">
+            <p>الرمادي - شارع المستودع</p>
+            <p>بناية مستشفى المصطفى الاهلي سابقاً - فوق صيدلية النور</p>
           </div>
-          <div className="footer-address">
-            الرمادي - شارع المستودع - بناية مستشفى المصطفى الاهلي سابقاً - فوق صيدلية النور
-          </div>
-          <div className="footer-location">
-            <span className="icon-location">📍</span>
-          </div>
+          <span className="icon-location">📍</span>
         </div>
       </div>
     </div>
