@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Search, Plus, Edit2, Save, Trash2, LogOut, Eye, Bell, X, Archive } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
@@ -30,6 +34,7 @@ const DoctorPage = () => {
   const [notifCount, setNotifCount] = useState(0);
   const [bellRinging, setBellRinging] = useState(false);
   const [otherEditorPresent, setOtherEditorPresent] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState(null);
   const navigate = useNavigate();
 
   const fetchPendingPatients = useCallback(async () => {
@@ -155,6 +160,17 @@ const DoctorPage = () => {
     catch (e) { toast.error("خطأ"); }
   };
 
+  const handleDeletePatient = async () => {
+    if (!patientToDelete) return;
+    try {
+      await apiClient.delete(`/patients/${patientToDelete.id}`);
+      toast.success("تم حذف المريض");
+      if (selectedPatient?.id === patientToDelete.id) setSelectedPatient(null);
+      setPatientToDelete(null);
+      fetchPendingPatients();
+    } catch (e) { toast.error("خطأ في حذف المريض"); }
+  };
+
   const handleLogout = () => { logout(); navigate("/login"); };
 
   return (
@@ -230,21 +246,32 @@ const DoctorPage = () => {
                   <p className="text-center text-slate-400 py-8 text-sm">لا يوجد مرضى</p>
                 ) : (
                   pendingPatients.map((p) => (
-                    <button
-                      key={p.id}
-                      data-testid={`patient-item-${p.id}`}
-                      onClick={() => selectPatient(p)}
-                      className={`w-full text-right p-3 rounded-xl border transition-all ${
-                        selectedPatient?.id === p.id
-                          ? 'bg-[#5B3A7D] text-white border-[#5B3A7D]'
-                          : 'bg-white hover:bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <p className="font-semibold text-sm">{p.name}</p>
-                      <p className={`text-xs mt-0.5 ${selectedPatient?.id === p.id ? 'text-white/80' : 'text-slate-500'}`}>
-                        {p.age} سنة
-                      </p>
-                    </button>
+                    <div key={p.id} className="relative group">
+                      <button
+                        data-testid={`patient-item-${p.id}`}
+                        onClick={() => selectPatient(p)}
+                        className={`w-full text-right p-3 pe-10 rounded-xl border transition-all ${
+                          selectedPatient?.id === p.id
+                            ? 'bg-[#5B3A7D] text-white border-[#5B3A7D]'
+                            : 'bg-white hover:bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <p className="font-semibold text-sm">{p.name}</p>
+                        <p className={`text-xs mt-0.5 ${selectedPatient?.id === p.id ? 'text-white/80' : 'text-slate-500'}`}>
+                          {p.age} سنة
+                        </p>
+                      </button>
+                      <Button
+                        data-testid={`delete-patient-button-${p.id}`}
+                        size="icon" variant="ghost"
+                        className={`absolute top-1/2 -translate-y-1/2 start-1 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity ${
+                          selectedPatient?.id === p.id ? 'hover:bg-white/20' : ''
+                        }`}
+                        onClick={(e) => { e.stopPropagation(); setPatientToDelete(p); }}
+                      >
+                        <Trash2 className={`w-3.5 h-3.5 ${selectedPatient?.id === p.id ? 'text-white' : 'text-red-500'}`} />
+                      </Button>
+                    </div>
                   ))
                 )}
               </div>
@@ -374,6 +401,27 @@ const DoctorPage = () => {
       <div className="print-container">
         <PrescriptionTemplate patient={selectedPatient} examData={live.data} />
       </div>
+
+      <AlertDialog open={!!patientToDelete} onOpenChange={(open) => !open && setPatientToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف المريض</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف {patientToDelete?.name}؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-patient-button">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-delete-patient-button"
+              onClick={handleDeletePatient}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

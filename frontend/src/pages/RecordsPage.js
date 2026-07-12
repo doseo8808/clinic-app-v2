@@ -5,8 +5,12 @@ import useWebSocket from "@/hooks/useWebSocket";
 import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar, Pencil } from "lucide-react";
+import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar, Pencil, Trash2 } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
 
@@ -28,6 +32,7 @@ const RecordsPage = () => {
   const [selected, setSelected] = useState(null);
   const [editingPatient, setEditingPatient] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
   const navigate = useNavigate();
   const role = getRole();
 
@@ -77,6 +82,16 @@ const RecordsPage = () => {
 
   const handleEdit = (record) => setEditingPatient(record);
   const handleCloseEdit = () => setEditingPatient(null);
+
+  const handleDeleteRecord = async () => {
+    if (!recordToDelete) return;
+    try {
+      await apiClient.delete(`/patients/${recordToDelete.id}`);
+      toast.success("تم حذف السجل");
+      setRecordToDelete(null);
+      fetchRecords(searchTerm);
+    } catch (e) { toast.error("خطأ في حذف السجل"); }
+  };
 
   const handleSaveEdit = async () => {
     if (!editingPatient) return;
@@ -229,6 +244,15 @@ const RecordsPage = () => {
                       <Printer className="w-4 h-4 ms-1" />
                       طباعة
                     </Button>
+                    <Button
+                      data-testid={`delete-record-button-${r.id}`}
+                      variant="outline" size="sm"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+                      onClick={() => setRecordToDelete(r)}
+                    >
+                      <Trash2 className="w-4 h-4 ms-1" />
+                      حذف
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -244,6 +268,27 @@ const RecordsPage = () => {
           examData={editingPatient ? live.data : selected}
         />
       </div>
+
+      <AlertDialog open={!!recordToDelete} onOpenChange={(open) => !open && setRecordToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف السجل</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف سجل {recordToDelete?.name}؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-record-button">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-delete-record-button"
+              onClick={handleDeleteRecord}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

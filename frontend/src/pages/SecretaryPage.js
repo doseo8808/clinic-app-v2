@@ -5,6 +5,10 @@ import useWebSocket from "@/hooks/useWebSocket";
 import useLivePatient from "@/hooks/useLivePatient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { UserPlus, LogOut, Eye, RefreshCw, Send, ArrowLeft, Printer, CheckCircle2, Archive, CalendarPlus, CalendarClock, Trash2, UserCheck } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
@@ -41,6 +45,8 @@ const SecretaryPage = () => {
   const [patients, setPatients] = useState([]);
   const [shortcuts, setShortcuts] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [appointmentToCancel, setAppointmentToCancel] = useState(null);
+  const [patientToDelete, setPatientToDelete] = useState(null);
   const [saving, setSaving] = useState(false);
   const [otherEditorPresent, setOtherEditorPresent] = useState(false);
   const [tick, setTick] = useState(0);
@@ -161,12 +167,25 @@ const SecretaryPage = () => {
     } catch (e) { toast.error("خطأ في تحديث الحالة"); }
   };
 
-  const handleCancelAppointment = async (appt) => {
+  const handleCancelAppointment = async () => {
+    if (!appointmentToCancel) return;
     try {
-      await apiClient.delete(`/patients/${appt.id}`);
+      await apiClient.delete(`/patients/${appointmentToCancel.id}`);
       toast.success("تم إلغاء الموعد");
+      setAppointmentToCancel(null);
       fetchAppointments();
     } catch (e) { toast.error("خطأ في إلغاء الموعد"); }
+  };
+
+  const handleDeletePatient = async () => {
+    if (!patientToDelete) return;
+    try {
+      await apiClient.delete(`/patients/${patientToDelete.id}`);
+      toast.success("تم حذف المريض");
+      if (selectedPatient?.id === patientToDelete.id) setSelectedPatient(null);
+      setPatientToDelete(null);
+      fetchPatients();
+    } catch (e) { toast.error("خطأ في حذف المريض"); }
   };
 
   const handleSelectPatient = (p) => setSelectedPatient(p);
@@ -339,24 +358,33 @@ const SecretaryPage = () => {
                   </div>
                 ) : (
                   patients.map((p) => (
-                    <button
-                      key={p.id}
-                      data-testid={`waiting-patient-${p.id}`}
-                      onClick={() => handleSelectPatient(p)}
-                      className="w-full text-right p-4 rounded-xl border border-slate-200 hover:border-[#5B3A7D] hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-[#1F2937]">{p.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {p.age} سنة • {formatWaitingTime(p.created_at)}
-                          </p>
+                    <div key={p.id} className="relative group">
+                      <button
+                        data-testid={`waiting-patient-${p.id}`}
+                        onClick={() => handleSelectPatient(p)}
+                        className="w-full text-right p-4 pe-12 rounded-xl border border-slate-200 hover:border-[#5B3A7D] hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-[#1F2937]">{p.name}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {p.age} سنة • {formatWaitingTime(p.created_at)}
+                            </p>
+                          </div>
+                          <span className={`text-xs px-3 py-1 rounded-full font-medium status-${p.status}`}>
+                            {STATUS_LABELS[p.status] || p.status}
+                          </span>
                         </div>
-                        <span className={`text-xs px-3 py-1 rounded-full font-medium status-${p.status}`}>
-                          {STATUS_LABELS[p.status] || p.status}
-                        </span>
-                      </div>
-                    </button>
+                      </button>
+                      <Button
+                        data-testid={`delete-patient-button-${p.id}`}
+                        size="icon" variant="ghost"
+                        className="absolute top-1/2 -translate-y-1/2 start-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); setPatientToDelete(p); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      </Button>
+                    </div>
                   ))
                 )}
               </div>
@@ -466,7 +494,7 @@ const SecretaryPage = () => {
                       <Button
                         data-testid={`appt-cancel-button-${a.id}`}
                         size="sm" variant="ghost"
-                        onClick={() => handleCancelAppointment(a)}
+                        onClick={() => setAppointmentToCancel(a)}
                       >
                         <Trash2 className="w-4 h-4 text-red-500" />
                       </Button>
@@ -484,6 +512,48 @@ const SecretaryPage = () => {
       <div className="print-container">
         <PrescriptionTemplate patient={selectedPatient} examData={live.data} />
       </div>
+
+      <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>إلغاء الموعد</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من إلغاء موعد {appointmentToCancel?.name}؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-cancel-appointment-button">تراجع</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-cancel-appointment-button"
+              onClick={handleCancelAppointment}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              إلغاء الموعد
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!patientToDelete} onOpenChange={(open) => !open && setPatientToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف المريض</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف {patientToDelete?.name}؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-patient-button">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-delete-patient-button"
+              onClick={handleDeletePatient}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
