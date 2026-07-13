@@ -222,14 +222,6 @@ const DoctorPage = () => {
               <Settings className="w-4 h-4 ms-1" />
               <span className="text-sm">الإعدادات</span>
             </Button>
-            <Button
-              data-testid="open-settings-button"
-              variant="ghost" size="sm"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings className="w-4 h-4 ms-1" />
-              <span className="text-sm">الإعدادات</span>
-            </Button>
             <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 ms-1" />
               <span className="text-sm">خروج</span>
