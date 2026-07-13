@@ -32,6 +32,13 @@ export const verifyPin = async (pin) => {
   return data;   // { success, role, message }
 };
 
+export const changePin = async (currentPin, newPin) => {
+  const { data } = await axios.post(`${API}/change-pin`, {
+    current_pin: currentPin, new_pin: newPin,
+  });
+  return data;   // { success, message }
+};
+
 export const isAuthenticated = () => !!localStorage.getItem("clinic_pin");
 export const getPin = () => localStorage.getItem("clinic_pin");
 export const getRole = () => localStorage.getItem("clinic_role");

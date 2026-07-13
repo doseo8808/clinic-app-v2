@@ -12,9 +12,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Search, Plus, Edit2, Save, Trash2, LogOut, Eye, Bell, X, Archive } from "lucide-react";
+import { Search, Plus, Edit2, Save, Trash2, LogOut, Eye, Bell, X, Archive, Settings } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
+import SettingsDialog from "@/components/SettingsDialog";
 
 const COLOR_PALETTE = [
   "#5B3A7D", "#0B6E4F", "#2A9D8F", "#D97706",
@@ -35,6 +36,7 @@ const DoctorPage = () => {
   const [bellRinging, setBellRinging] = useState(false);
   const [otherEditorPresent, setOtherEditorPresent] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = useNavigate();
 
   const fetchPendingPatients = useCallback(async () => {
@@ -82,13 +84,18 @@ const DoctorPage = () => {
 
   const clearNotifications = () => { setNotifCount(0); setBellRinging(false); };
 
-  const searchPatients = async () => {
-    if (!searchTerm.trim()) { fetchPendingPatients(); return; }
+  const searchPatients = useCallback(async (term) => {
+    if (!term.trim()) { fetchPendingPatients(); return; }
     try {
-      const { data } = await apiClient.get(`/patients?search=${encodeURIComponent(searchTerm)}`);
+      const { data } = await apiClient.get('/patients', { params: { search: term.trim() } });
       setPendingPatients(data);
     } catch (e) { toast.error("خطأ في البحث"); }
-  };
+  }, [fetchPendingPatients]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { searchPatients(searchTerm); }, 300);
+    return () => clearTimeout(t);
+  }, [searchTerm, searchPatients]);
 
   const selectPatient = async (patient) => {
     setSelectedPatient(patient);
@@ -207,6 +214,22 @@ const DoctorPage = () => {
               <Archive className="w-4 h-4 ms-1" />
               <span className="text-sm">السجل</span>
             </Button>
+            <Button
+              data-testid="open-settings-button"
+              variant="ghost" size="sm"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="w-4 h-4 ms-1" />
+              <span className="text-sm">الإعدادات</span>
+            </Button>
+            <Button
+              data-testid="open-settings-button"
+              variant="ghost" size="sm"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="w-4 h-4 ms-1" />
+              <span className="text-sm">الإعدادات</span>
+            </Button>
             <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 ms-1" />
               <span className="text-sm">خروج</span>
@@ -222,28 +245,21 @@ const DoctorPage = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">قائمة الانتظار</h2>
-                <div className="flex gap-2 mt-3">
+                <div className="relative mt-3">
+                  <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />
                   <Input
                     data-testid="search-patient-input"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && searchPatients()}
                     placeholder="بحث..."
-                    className="h-9 text-sm"
+                    className="h-9 ps-9 text-sm"
                   />
-                  <Button
-                    data-testid="search-patient-button"
-                    onClick={searchPatients} size="icon" variant="outline"
-                    className="h-9 w-9"
-                  >
-                    <Search className="w-4 h-4" />
-                  </Button>
                 </div>
               </div>
 
               <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
                 {pendingPatients.length === 0 ? (
-                  <p className="text-center text-slate-400 py-8 text-sm">لا يوجد مرضى</p>
+                  <p className="text-center text-slate-400 py-8 text-sm">{searchTerm.trim() ? "لا توجد نتائج مطابقة" : "لا يوجد مرضى"}</p>
                 ) : (
                   pendingPatients.map((p) => (
                     <div key={p.id} className="relative group">
@@ -422,6 +438,8 @@ const DoctorPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 };

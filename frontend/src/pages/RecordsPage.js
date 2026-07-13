@@ -10,9 +10,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar, Pencil, Trash2 } from "lucide-react";
+import { LogOut, Eye, Search, ArrowLeft, Printer, Archive, Calendar, Pencil, Trash2, Settings } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
+import SettingsDialog from "@/components/SettingsDialog";
 
 const formatDate = (iso) => {
   if (!iso) return "";
@@ -33,6 +34,7 @@ const RecordsPage = () => {
   const [editingPatient, setEditingPatient] = useState(null);
   const [saving, setSaving] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = useNavigate();
   const role = getRole();
 
@@ -50,7 +52,13 @@ const RecordsPage = () => {
     }
   }, []);
 
-  useEffect(() => { fetchRecords(searchTerm); }, [fetchRecords]);
+  // Initial load (immediate), then live search as the user types (debounced).
+  useEffect(() => { fetchRecords(""); }, [fetchRecords]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { fetchRecords(searchTerm); }, 300);
+    return () => clearTimeout(t);
+  }, [searchTerm, fetchRecords]);
 
   // Live refresh: reflect new/edited/deleted completed records immediately,
   // without needing a manual refresh button.
@@ -66,11 +74,6 @@ const RecordsPage = () => {
 
   const { send } = useWebSocket(handleWsMessage);
   const live = useLivePatient({ patient: editingPatient, sendWs: send });
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchRecords(searchTerm);
-  };
 
   const handleLogout = () => { logout(); navigate("/login"); };
   const handleBackToApp = () => navigate(role === "doctor" ? "/doctor" : "/secretary");
@@ -148,10 +151,16 @@ const RecordsPage = () => {
               <p className="text-xs text-slate-500">الحالات المكتملة</p>
             </div>
           </div>
-          <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 ms-1" />
-            <span className="text-sm">خروج</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button data-testid="open-settings-button" variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
+              <Settings className="w-4 h-4 ms-1" />
+              <span className="text-sm">الإعدادات</span>
+            </Button>
+            <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 ms-1" />
+              <span className="text-sm">خروج</span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -180,23 +189,16 @@ const RecordsPage = () => {
       ) : (
       <main className="max-w-6xl mx-auto px-6 py-8 no-print">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-          <form onSubmit={handleSearch} className="flex gap-2">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />
             <Input
               data-testid="records-search-input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ابحث بالاسم..."
-              className="h-11 text-base flex-1"
+              className="h-11 ps-9 text-base"
             />
-            <Button
-              data-testid="records-search-button"
-              type="submit"
-              className="h-11 bg-[#5B3A7D] hover:bg-[#4A2E68]"
-            >
-              <Search className="w-4 h-4 ms-2" />
-              بحث
-            </Button>
-          </form>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -289,6 +291,8 @@ const RecordsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 };

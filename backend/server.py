@@ -51,16 +51,33 @@ SECRETARY_PIN = os.environ.get('SECRETARY_PIN', '1234')
 DOCTOR_PIN = os.environ.get('DOCTOR_PIN', '4321')
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()]
 
+# In-memory cache of current PINs, loaded from DB at startup and kept in sync
+# whenever a PIN is changed via the settings endpoint. The DB (not the .env file)
+# is the source of truth once the app has started, so changes apply immediately
+# without needing a container restart.
+_pin_cache = {'secretary': SECRETARY_PIN, 'doctor': DOCTOR_PIN}
+
+
+async def load_pin_cache():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT key, value FROM settings WHERE key IN ('secretary_pin','doctor_pin')") as cursor:
+            rows = await cursor.fetchall()
+    for key, value in rows:
+        if key == 'secretary_pin':
+            _pin_cache['secretary'] = value
+        elif key == 'doctor_pin':
+            _pin_cache['doctor'] = value
+
 
 def get_role_for_pin(pin: str) -> Optional[str]:
     """Return 'secretary' or 'doctor' if PIN matches, else None."""
     if not pin:
         return None
-    if secrets.compare_digest(pin, SECRETARY_PIN):
+    if secrets.compare_digest(pin, _pin_cache['secretary']):
         return 'secretary'
-    if secrets.compare_digest(pin, DOCTOR_PIN):
+    if secrets.compare_digest(pin, _pin_cache['doctor']):
         return 'doctor'
-    # Legacy fallback (single PIN)
+    # Legacy fallback (single PIN, pre-role-split installs)
     if secrets.compare_digest(pin, CLINIC_PIN):
         return 'secretary'
     return None
@@ -103,6 +120,22 @@ async def init_db():
                 sort_order INTEGER DEFAULT 0, created_at TEXT NOT NULL
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY, value TEXT NOT NULL
+            )
+        ''')
+        # Seed PINs from environment on first run only (never overwrite existing DB values)
+        async with db.execute("SELECT key FROM settings WHERE key IN ('secretary_pin','doctor_pin')") as cursor:
+            existing = {row[0] async for row in cursor}
+        if 'secretary_pin' not in existing:
+            await db.execute(
+                "INSERT INTO settings (key, value) VALUES ('secretary_pin', ?)", (SECRETARY_PIN,)
+            )
+        if 'doctor_pin' not in existing:
+            await db.execute(
+                "INSERT INTO settings (key, value) VALUES ('doctor_pin', ?)", (DOCTOR_PIN,)
+            )
         # New columns (idempotent) - extended exam fields
         for col in ['right_eye_ucva', 'left_eye_ucva',
                     'right_eye_iop', 'left_eye_iop',
@@ -169,6 +202,7 @@ manager = ConnectionManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await load_pin_cache()
     yield
 
 
@@ -266,6 +300,11 @@ class PinVerification(BaseModel):
     pin: constr(min_length=1, max_length=50)
 
 
+class PinChange(BaseModel):
+    current_pin: constr(min_length=1, max_length=50)
+    new_pin: constr(min_length=4, max_length=50)
+
+
 # ============ Helpers ============
 EYE_FIELDS = ['va', 'sph', 'cyl', 'ax', 'bcva', 'near',
               'ucva', 'iop', 'lid', 'cornea', 'lens', 'retina']
@@ -313,6 +352,32 @@ async def verify_pin_endpoint(request: Request, body: PinVerification):
     if not role:
         raise HTTPException(status_code=401, detail="PIN غير صحيح")
     return {"success": True, "role": role, "message": "تم التحقق بنجاح"}
+
+
+@api_router.post("/change-pin")
+@limiter.limit("5/minute")
+async def change_pin_endpoint(request: Request, body: PinChange):
+    role = get_role_for_pin(body.current_pin)
+    if not role:
+        raise HTTPException(status_code=401, detail="الرمز الحالي غير صحيح")
+    if not body.new_pin.strip().isdigit():
+        raise HTTPException(status_code=400, detail="الرمز الجديد يجب أن يتكون من أرقام فقط")
+    new_pin = body.new_pin.strip()
+    # A newly chosen PIN must not collide with the other role's active PIN,
+    # otherwise both roles would end up sharing one code.
+    other_role = 'doctor' if role == 'secretary' else 'secretary'
+    if secrets.compare_digest(new_pin, _pin_cache[other_role]):
+        raise HTTPException(status_code=400, detail="هذا الرمز مستخدم بالفعل، اختر رمزاً مختلفاً")
+    key = 'secretary_pin' if role == 'secretary' else 'doctor_pin'
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, new_pin)
+        )
+        await db.commit()
+    _pin_cache[role] = new_pin
+    return {"success": True, "message": "تم تغيير الرمز بنجاح"}
 
 
 # ============ WebSocket for real-time updates ============

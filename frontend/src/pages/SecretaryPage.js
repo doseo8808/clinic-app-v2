@@ -10,9 +10,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, LogOut, Eye, RefreshCw, Send, ArrowLeft, Printer, CheckCircle2, Archive, CalendarPlus, CalendarClock, Trash2, UserCheck } from "lucide-react";
+import { UserPlus, LogOut, Eye, RefreshCw, Send, ArrowLeft, Printer, CheckCircle2, Archive, CalendarPlus, CalendarClock, Trash2, UserCheck, Search, Settings } from "lucide-react";
 import ExamForm from "@/components/ExamForm";
 import PrescriptionTemplate from "@/components/PrescriptionTemplate";
+import SettingsDialog from "@/components/SettingsDialog";
 
 const STATUS_LABELS = {
   pending: 'في الانتظار',
@@ -50,6 +51,8 @@ const SecretaryPage = () => {
   const [saving, setSaving] = useState(false);
   const [otherEditorPresent, setOtherEditorPresent] = useState(false);
   const [tick, setTick] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = useNavigate();
 
   // Appointments (future bookings / follow-up visits)
@@ -66,9 +69,11 @@ const SecretaryPage = () => {
     year: 'numeric', month: 'long', day: 'numeric'
   });
 
-  const fetchPatients = useCallback(async () => {
+  const fetchPatients = useCallback(async (search = "") => {
     try {
-      const { data } = await apiClient.get('/patients');
+      const params = {};
+      if (search.trim()) params.search = search.trim();
+      const { data } = await apiClient.get('/patients', { params });
       setPatients(data.filter(p => p.status !== 'completed' && p.status !== 'scheduled'));
     } catch (e) { /* silent */ }
   }, []);
@@ -92,6 +97,13 @@ const SecretaryPage = () => {
 
   useEffect(() => { fetchPatients(); fetchShortcuts(); fetchAppointments(); }, [fetchPatients, fetchShortcuts, fetchAppointments]);
 
+  // Live search: re-query as the secretary types, with a short debounce
+  // so we don't hit the API on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => { fetchPatients(searchTerm); }, 300);
+    return () => clearTimeout(t);
+  }, [searchTerm, fetchPatients]);
+
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 30000);
     return () => clearInterval(t);
@@ -107,7 +119,7 @@ const SecretaryPage = () => {
         window.__otherEditorTimer = setTimeout(() => setOtherEditorPresent(false), 3000);
       }
     } else if (['patient_created', 'patient_updated', 'patient_deleted', 'appointment_created'].includes(msg.event)) {
-      fetchPatients();
+      fetchPatients(searchTerm);
       fetchAppointments();
       if (msg.event === 'patient_deleted' && msg.data?.id === selectedPatient?.id) {
         setSelectedPatient(null);
@@ -115,7 +127,7 @@ const SecretaryPage = () => {
     } else if (msg.event === 'shortcut_changed') {
       fetchShortcuts();
     }
-  }, [selectedPatient?.id, fetchPatients, fetchAppointments, fetchShortcuts]);
+  }, [selectedPatient?.id, fetchPatients, fetchAppointments, fetchShortcuts, searchTerm]);
 
   const { send } = useWebSocket(handleWsMessage);
   const live = useLivePatient({ patient: selectedPatient, sendWs: send });
@@ -260,6 +272,14 @@ const SecretaryPage = () => {
               <Archive className="w-4 h-4 ms-1" />
               <span className="text-sm">السجل</span>
             </Button>
+            <Button
+              data-testid="open-settings-button"
+              variant="ghost" size="sm"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="w-4 h-4 ms-1" />
+              <span className="text-sm">الإعدادات</span>
+            </Button>
             <Button data-testid="logout-button" variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 ms-1" />
               <span className="text-sm">خروج</span>
@@ -344,17 +364,27 @@ const SecretaryPage = () => {
                 <Button
                   data-testid="refresh-patients-button"
                   variant="ghost" size="icon"
-                  onClick={fetchPatients}
+                  onClick={() => fetchPatients(searchTerm)}
                 >
                   <RefreshCw className="w-4 h-4" />
                 </Button>
+              </div>
+              <div className="relative mb-3">
+                <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />
+                <Input
+                  data-testid="waiting-room-search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="ابحث بالاسم..."
+                  className="h-10 ps-9 text-sm"
+                />
               </div>
               <p className="text-xs text-slate-400 mb-3">اضغط على مريض لفتح ملفه ومساعدة الدكتورة</p>
               <div className="space-y-2 max-h-[500px] overflow-y-auto">
                 {patients.length === 0 ? (
                   <div className="text-center py-12 text-slate-400">
                     <Eye className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">لا يوجد مرضى حالياً</p>
+                    <p className="text-sm">{searchTerm.trim() ? "لا توجد نتائج مطابقة" : "لا يوجد مرضى حالياً"}</p>
                   </div>
                 ) : (
                   patients.map((p) => (
@@ -554,6 +584,8 @@ const SecretaryPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 };
